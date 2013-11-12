@@ -52,11 +52,15 @@ runCmd cmd = do
 	putStrLn $ "proc exited with status" ++ show i
 	putStrLn $ "output: " ++ x
 
+-- Simple token-based parser that folds over a state (in this case a Cmd)
 parseCmd' :: String -> Cmd -> Cmd
 parseCmd' "|" cmd@(Cmd _ _) = Pipe cmd Empty
+parseCmd' "<" cmd = Redirection RLeft cmd ""
+parseCmd' ">" cmd = Redirection RRight cmd ""
 parseCmd' arg Empty = Cmd arg []
 parseCmd' arg (Cmd prg args) = Cmd prg (args ++ [arg])
 parseCmd' arg (Pipe cmd1 cmd2) = Pipe cmd1 (parseCmd' arg cmd2)
+parseCmd' arg (Redirection dir cmd "") = Redirection dir cmd arg
 
 parseCmd :: String -> Cmd
 parseCmd cmd =
