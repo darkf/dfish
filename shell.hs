@@ -16,13 +16,11 @@ data Cmd = Cmd String [String]
 (<.) = Redirection RLeft
 (>.) = Redirection RRight
 
-data Proc = Proc { p_stdin :: Handle, p_stdout :: Handle, p_proc :: P.ProcessHandle }
+data Proc = Proc { p_stdin :: Maybe Handle, p_stdout :: Maybe Handle, p_proc :: P.ProcessHandle }
 
 runCmd' :: Cmd -> (P.StdStream, P.StdStream) -> IO Proc
 runCmd' (Cmd cmd args) std = do
-	(pin', pout', _, p) <- P.createProcess (P.proc cmd args) { P.std_in = fst std, P.std_out = snd std }
-	let pin = fromMaybe (error "") pin'
-	let pout = fromMaybe (error "") pout'
+	(pin, pout, _, p) <- P.createProcess (P.proc cmd args) { P.std_in = fst std, P.std_out = snd std }
 	let proc = Proc { p_stdin=pin, p_stdout=pout, p_proc=p }
 	return proc
 
@@ -35,20 +33,25 @@ runCmd' (Redirection dir cmd file) std = do
 	let std' = case dir of
 		RLeft -> (P.UseHandle file, snd std)
 		RRight -> (fst std, P.UseHandle file)
-	proc <- runCmd' cmd std'
-	return proc
+	runCmd' cmd std'
 
 runCmd' (Pipe cmd1 cmd2) std = do
 	proc1 <- runCmd' cmd1 (fst std, P.CreatePipe)
-	proc2 <- runCmd' cmd2 (P.UseHandle (p_stdout proc1), snd std)
-	return proc2
+	case p_stdout proc1 of
+		Nothing -> error "LHS of pipe has no stdout"
+		Just stdout' -> do
+			proc2 <- runCmd' cmd2 (P.UseHandle stdout', snd std)
+			return proc2
 
 runCmd :: Cmd -> IO String
 runCmd cmd = do
 	proc <- runCmd' cmd (P.CreatePipe, P.CreatePipe)
-	_ <- P.waitForProcess $ p_proc proc -- exit code
-	x <- hGetContents $ p_stdout proc -- stdout
-	return x
+	case p_stdout proc of
+		Nothing -> return ""
+		Just stdout' -> do
+			x <- hGetContents stdout' -- stdout
+			_ <- P.waitForProcess $ p_proc proc -- exit code
+			return x
 
 -- Simple token-based parser that folds over a state (in this case a Cmd)
 parseCmd' :: String -> Cmd -> Cmd
