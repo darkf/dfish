@@ -39,8 +39,8 @@ runCmd' (Redirection dir cmd file) std = do
 	return proc
 
 runCmd' (Pipe cmd1 cmd2) std = do
-	proc1 <- runCmd' cmd1 std
-	proc2 <- runCmd' cmd2 (P.UseHandle (p_stdout proc1), P.CreatePipe)
+	proc1 <- runCmd' cmd1 (fst std, P.CreatePipe)
+	proc2 <- runCmd' cmd2 (P.UseHandle (p_stdout proc1), snd std)
 	return proc2
 
 runCmd :: Cmd -> IO String
@@ -72,7 +72,7 @@ prompt = putStr "$ " >> hFlush stdout >> getLine
 main = do
 	args <- getArgs
 	case args of
-		["-c", cmd] -> evalCmd cmd >>= putStrLn
+		["-c", cmd] -> evalCmd cmd >>= putStr
 		otherwise -> repl
 	where
-	repl = prompt >>= \p -> unless (p == "quit") (evalCmd p >>= putStrLn >> repl)
+	repl = prompt >>= \p -> unless (p == "quit") (evalCmd p >>= putStr >> repl)
