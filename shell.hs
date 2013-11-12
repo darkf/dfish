@@ -2,7 +2,7 @@ import System.Environment (getArgs)
 import Control.Applicative ((<$>))
 import Control.Monad (unless)
 import Data.Maybe (fromMaybe)
-import System.IO (hFlush, hGetContents, Handle, stdout)
+import System.IO (hFlush, hGetContents, Handle, stdout, openFile, IOMode(..))
 import qualified System.Process as P
 
 data Direction = RLeft | RRight deriving (Show, Eq)
@@ -23,6 +23,18 @@ runCmd' (Cmd cmd args) std = do
 	let pin = fromMaybe (error "") pin'
 	let pout = fromMaybe (error "") pout'
 	let proc = Proc { p_stdin=pin, p_stdout=pout, p_proc=p }
+	return proc
+
+runCmd' (Redirection dir cmd file) std = do
+	let mode = case dir of
+		RLeft -> ReadMode
+		RRight -> WriteMode
+	file <- openFile file mode
+
+	let std' = case dir of
+		RLeft -> (P.UseHandle file, snd std)
+		RRight -> (fst std, P.UseHandle file)
+	proc <- runCmd' cmd std'
 	return proc
 
 runCmd' (Pipe cmd1 cmd2) std = do
