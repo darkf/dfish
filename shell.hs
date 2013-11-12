@@ -43,14 +43,12 @@ runCmd' (Pipe cmd1 cmd2) std = do
 	proc2 <- runCmd' cmd2 (P.UseHandle (p_stdout proc1), P.CreatePipe)
 	return proc2
 
-runCmd :: Cmd -> IO ()
+runCmd :: Cmd -> IO String
 runCmd cmd = do
-	putStrLn $ "cmd: " ++ show cmd
 	proc <- runCmd' cmd (P.CreatePipe, P.CreatePipe)
-	x <- hGetContents $ p_stdout proc
-	i <- P.waitForProcess $ p_proc proc
-	putStrLn $ "proc exited with status" ++ show i
-	putStrLn $ "output: " ++ x
+	_ <- P.waitForProcess $ p_proc proc -- exit code
+	x <- hGetContents $ p_stdout proc -- stdout
+	return x
 
 -- Simple token-based parser that folds over a state (in this case a Cmd)
 parseCmd' :: String -> Cmd -> Cmd
@@ -67,14 +65,14 @@ parseCmd cmd =
 	let tokens = words cmd
 	in foldl (flip parseCmd') Empty tokens
 
-evalCmd :: String -> IO ()
+evalCmd :: String -> IO String
 evalCmd = runCmd . parseCmd
 
 prompt = putStr "$ " >> hFlush stdout >> getLine
 main = do
 	args <- getArgs
 	case args of
-		["-c", cmd] -> evalCmd cmd
+		["-c", cmd] -> evalCmd cmd >>= putStrLn
 		otherwise -> repl
 	where
-	repl = prompt >>= \p -> unless (p == "quit") (evalCmd p >> repl)
+	repl = prompt >>= \p -> unless (p == "quit") (evalCmd p >>= putStrLn >> repl)
