@@ -9,6 +9,7 @@ data Direction = RLeft | RRight deriving (Show, Eq)
 data Cmd = Cmd String [String]
 		 | Pipe Cmd Cmd
 		 | Redirection Direction Cmd String
+		 | Empty
 	 deriving (Show, Eq)
 
 (|.) = Pipe
@@ -51,10 +52,21 @@ runCmd cmd = do
 	putStrLn $ "proc exited with status" ++ show i
 	putStrLn $ "output: " ++ x
 
-main = runCmd $ Cmd "echo" ["foo"] |.  Cmd "cat" ["-", "bar.txt"] |. Cmd "cat" ["-", "baz.txt"] 
-{-
+parseCmd' :: String -> Cmd -> Cmd
+parseCmd' "|" cmd@(Cmd _ _) = Pipe cmd Empty
+parseCmd' arg Empty = Cmd arg []
+parseCmd' arg (Cmd prg args) = Cmd prg (args ++ [arg])
+parseCmd' arg (Pipe cmd1 cmd2) = Pipe cmd1 (parseCmd' arg cmd2)
+
+parseCmd :: String -> Cmd
+parseCmd cmd =
+	let tokens = words cmd
+	in foldl (flip parseCmd') Empty tokens
+
+evalCmd :: String -> IO ()
+evalCmd = runCmd . parseCmd
+
 prompt = putStr "$ " >> hFlush stdout >> getLine
-evalCmd cmd = undefined
 main = do
 	args <- getArgs
 	case args of
@@ -62,4 +74,3 @@ main = do
 		otherwise -> repl
 	where
 	repl = prompt >>= \p -> unless (p == "quit") (evalCmd p >> repl)
--}
