@@ -17,25 +17,29 @@ data Cmd = Cmd String [String]
 
 data Proc = Proc { p_stdin :: Handle, p_stdout :: Handle, p_proc :: P.ProcessHandle }
 
-runCmd' :: Cmd -> IO Proc
-runCmd' (Cmd cmd args) = do
-	(pin', pout', _, p) <- P.createProcess (P.proc cmd args) { P.std_in = P.CreatePipe, P.std_out = P.CreatePipe }
+runCmd' :: Cmd -> (P.StdStream, P.StdStream) -> IO Proc
+runCmd' (Cmd cmd args) std = do
+	(pin', pout', _, p) <- P.createProcess (P.proc cmd args) { P.std_in = fst std, P.std_out = snd std }
 	let pin = fromMaybe (error "") pin'
 	let pout = fromMaybe (error "") pout'
 	let proc = Proc { p_stdin=pin, p_stdout=pout, p_proc=p }
 	return proc
-	
+
+runCmd' (Pipe cmd1 cmd2) std = do
+	proc1 <- runCmd' cmd1 std
+	proc2 <- runCmd' cmd2 (P.UseHandle (p_stdout proc1), P.CreatePipe)
+	return proc2
 
 runCmd :: Cmd -> IO ()
 runCmd cmd = do
 	putStrLn $ "cmd: " ++ show cmd
-	proc <- runCmd' cmd
+	proc <- runCmd' cmd (P.CreatePipe, P.CreatePipe)
 	x <- hGetContents $ p_stdout proc
 	i <- P.waitForProcess $ p_proc proc
 	putStrLn $ "proc exited with status" ++ show i
 	putStrLn $ "output: " ++ x
 
-main = runCmd $ Cmd "echo" ["foo"] -- Cmd "echo" ["foo"] |.  Cmd "cat" ["-", "bar.txt"] 
+main = runCmd $ Cmd "echo" ["foo"] |.  Cmd "cat" ["-", "bar.txt"] |. Cmd "cat" ["-", "baz.txt"] 
 {-
 prompt = putStr "$ " >> hFlush stdout >> getLine
 evalCmd cmd = undefined
